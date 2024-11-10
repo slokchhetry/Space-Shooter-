@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Space Shooter</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Howler.js for Audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <style>
+        canvas { 
+            touch-action: manipulation; 
+            image-rendering: pixelated; 
+        }
+    </style>
+</head>
+<body class="bg-black text-white overflow-hidden">
+    <div id="game-container" class="relative w-full h-screen flex justify-center items-center">
+        <canvas id="gameCanvas" class="max-w-full max-h-full"></canvas>
+        <div id="start-screen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col justify-center items-center">
+            <h1 class="text-4xl mb-8 text-green-500">COSMIC DEFENDER</h1>
+            <button id="start-btn" class="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700">
+                START GAME
+            </button>
+        </div>
+        <div id="game-overlay" class="absolute top-4 left-4 hidden">
+            <div class="text-xl">
+                Score: <span id="score">0</span>
+                | High Score: <span id="high-score">0</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const gameOverlay = document.getElementById('game-overlay');
+        const scoreDisplay = document.getElementById('score');
+        const highScoreDisplay = document.getElementById('high-score');
+
+        // Game Configuration
+        const config = {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            playerSpeed: 5,
+            bulletSpeed: 10,
+            enemySpeed: 2,
+            powerUpChance: 0.05
+        };
+
+        // Set canvas size
+        canvas.width = config.width;
+        canvas.height = config.height;
+
+        // Sound Effects
+        const sounds = {
+            shoot: new Howl({ src: ['https://assets.mixkit.co/sfx/preview/mixkit-game-level-music-689.mp3'] }),
+            explosion: new Howl({ src: ['https://assets.mixkit.co/sfx/preview/mixkit-arcade-retro-game-over-bass-2866.wav'] }),
+            powerUp: new Howl({ src: ['https://assets.mixkit.co/sfx/preview/mixkit-arcade-bonus-alert-sound-2020.wav'] })
+        };
+
+        // Game State
+        const game = {
+            player: null,
+            enemies: [],
+            bullets: [],
+            powerUps: [],
+            score: 0,
+            highScore: localStorage.getItem('highScore') || 0,
+            isGameOver: false
+        };
+
+        // Player Class
+        class Player {
+            constructor() {
+                this.x = config.width / 2;
+                this.y = config.height - 50;
+                this.width = 40;
+                this.height = 40;
+                this.color = 'lime';
+                this.lives = 3;
+                this.weapon = 1;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            move(direction) {
+                if (direction === 'left' && this.x > 0) this.x -= config.playerSpeed;
+                if (direction === 'right' && this.x < config.width - this.width) this.x += config.playerSpeed;
+            }
+
+            shoot() {
+                sounds.shoot.play();
+                if (this.weapon === 1) {
+                    game.bullets.push(new Bullet(this.x + this.width / 2, this.y));
+                } else {
+                    game.bullets.push(new Bullet(this.x, this.y));
+                    game.bullets.push(new Bullet(this.x + this.width, this.y));
+                }
+            }
+        }
+
+        // Bullet Class
+        class Bullet {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 5;
+                this.height = 15;
+                this.color = 'red';
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.y -= config.bulletSpeed;
+            }
+        }
+
+        // Enemy Class
+        class Enemy {
+            constructor() {
+                this.x = Math.random() * (config.width - 30);
+                this.y = -50;
+                this.width = 30;
+                this.height = 30;
+                this.color = 'purple';
+                this.speed = Math.random() * 2 + 1;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.y += this.speed;
+            }
+        }
+
+        // PowerUp Class
+        class PowerUp {
+            constructor() {
+                this.x = Math.random() * (config.width - 20);
+                this.y = -50;
+                this.width = 20;
+                this.height = 20;
+                this.color = 'gold';
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+
+            update() {
+                this.y += 2;
+            }
+        }
+
+        // Game Setup
+        function setupGame() {
+            game.player = new Player();
+            game.enemies = [];
+            game.bullets = [];
+            game.powerUps = [];
+            game.score = 0;
+            game.isGameOver = false;
+            scoreDisplay.textContent = game.score;
+            gameOverlay.classList.remove('hidden');
+            startScreen.classList.add('hidden');
+        }
+
+        // Game Loop
+        function gameLoop() {
+            if (game.isGameOver) return;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, config.width, config.height);
+
+            // Draw and update player
+            game.player.draw();
+
+            // Spawn enemies
+            if (Math.random() < 0.02) {
+                game.enemies.push(new Enemy());
+            }
+
+            // Spawn power-ups
+            if (Math.random() < config.powerUpChance) {
+                game.powerUps.push(new PowerUp());
+            }
+
+            // Update and draw bullets
+            game.bullets.forEach((bullet, index) => {
+                bullet.draw();
+                bullet.update();
+                if (bullet.y < 0) game.bullets.splice(index, 1);
+            });
+
+            // Update and draw enemies
+            game.enemies.forEach((enemy, enemyIndex) => {
+                enemy.draw();
+                enemy.update();
+
+                // Check collision with bullets
+                game.bullets.forEach((bullet, bulletIndex) => {
+                    if (
+                        bullet.x < enemy.x + enemy.width &&
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + bullet.height > enemy.y
+                    ) {
+                        game.enemies.splice(enemyIndex, 1);
+                        game.bullets.splice(bulletIndex, 1);
+                        game.score += 10;
+                        sounds.explosion.play();
+                        scoreDisplay.textContent = game.score;
+                    }
+                });
+
+                // Check game over condition
+                if (enemy.y > config.height) {
+                    game.isGameOver = true;
+                    gameOver();
+                }
+            });
+
+            // Update and draw power-ups
+            game.powerUps.forEach((powerUp, index) => {
+                powerUp.draw();
+                powerUp.update();
+
+                // Check collision with player
+                if (
+                    game.player.x < powerUp.x + powerUp.width &&
+                    game.player.x + game.player.width > powerUp.x &&
+                    game.player.y < powerUp.y + powerUp.height &&
+                    game.player.y + game.player.height > powerUp.y
+                ) {
+                    game.powerUps.splice(index, 1);
+                    game.player.weapon++;
+                    sounds.powerUp.play();
+                }
+            });
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Game Over
+        function gameOver() {
+            if (game.score > game.highScore) {
+                game.highScore = game.score;
+                localStorage.setItem('highScore', game.highScore);
+                highScoreDisplay.textContent = game.highScore;
+            }
+            startScreen.classList.remove('hidden');
+            gameOverlay.classList.add('hidden');
+            ctx.clearRect(0, 0, config.width, config.height);
+        }
+
+        // Controls
+        window.addEventListener('keydown', (e) => {
+            if (game.isGameOver) return;
+            if (e.key === 'ArrowLeft') game.player.move('left');
+            if (e.key === 'ArrowRight') game.player.move('right');
+            if (e.key === ' ') game.player.shoot();
+        });
+
+        // Touch Controls
+        canvas.addEventListener('touchmove', (e) => {
+            if (game.isGameOver) return;
+            const touch = e.touches[0];
+            const touchX = touch.clientX - canvas.offsetLeft;
+            game.player.x = touchX - game.player.width / 2;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (game.isGameOver) return;
+            game.player.shoot();
+        });
+
+        // Start Game
+        startBtn.addEventListener('click', () => {
+            setupGame();
+            gameLoop();
+        });
+
+        // Initial High Score Display
+        highScoreDisplay.textContent = game.highScore;
+    </script>
+</body>
+</html>
